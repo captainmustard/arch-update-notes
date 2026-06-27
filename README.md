@@ -49,7 +49,7 @@ go build -o arch-update-notes .
 Optionally install it onto your PATH:
 
 ```sh
-go install github.com/ianataylor42/arch-update-notes@latest
+go install github.com/captainmustard/arch-update-notes@latest
 ```
 
 ## Usage

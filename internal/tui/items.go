@@ -10,7 +10,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/muesli/reflow/truncate"
 
-	"github.com/ianataylor42/arch-update-notes/internal/data"
+	"github.com/captainmustard/arch-update-notes/internal/data"
 )
 
 // --- package items ---

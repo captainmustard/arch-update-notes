@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/harmonica"
 
-	"github.com/ianataylor42/arch-update-notes/internal/data"
+	"github.com/captainmustard/arch-update-notes/internal/data"
 )
 
 type tab int

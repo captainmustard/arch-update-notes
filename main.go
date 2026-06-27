@@ -12,8 +12,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 
-	"github.com/ianataylor42/arch-update-notes/internal/data"
-	"github.com/ianataylor42/arch-update-notes/internal/tui"
+	"github.com/captainmustard/arch-update-notes/internal/data"
+	"github.com/captainmustard/arch-update-notes/internal/tui"
 )
 
 func main() {

@@ -61,7 +61,7 @@ func fetchFeed(client *http.Client, f Feed, limit int) ([]NewsItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "arch-update-notes/0.1 (+https://github.com/ianataylor42/arch-update-notes)")
+	req.Header.Set("User-Agent", "arch-update-notes/0.1 (+https://github.com/captainmustard/arch-update-notes)")
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 
-	"github.com/ianataylor42/arch-update-notes/internal/data"
+	"github.com/captainmustard/arch-update-notes/internal/data"
 )
 
 const (

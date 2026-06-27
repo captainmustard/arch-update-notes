@@ -1,4 +1,4 @@
-module github.com/ianataylor42/arch-update-notes
+module github.com/captainmustard/arch-update-notes
 
 go 1.26.4
 
