@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ianataylor42/arch-update-notes/internal/data"
 )
 
 const (
@@ -159,16 +161,13 @@ func (m Model) detailContent(w int) string {
 		if !c.When.IsZero() {
 			b.WriteString(labelStyle.Render("When:    ") + c.When.Format("2006-01-02 15:04:05") + "\n")
 		}
-		b.WriteString("\n" + labelStyle.Render("Changelog") + "\n")
 		cl, seen := m.clog[c.Name]
-		switch {
-		case !seen || cl.loading:
-			b.WriteString(lipgloss.NewStyle().Foreground(colMuted).Render("loading…"))
-		case cl.ok:
-			b.WriteString(cl.text)
-		default:
-			b.WriteString(lipgloss.NewStyle().Foreground(colMuted).Render("No changelog available (pacman -Qc " + c.Name + ")."))
+		hasClog := seen && cl.ok
+		if hasClog {
+			b.WriteString("\n" + labelStyle.Render("Changelog") + "\n")
+			b.WriteString(cl.text + "\n")
 		}
+		b.WriteString(m.referencesSection(c, hasClog))
 		return wrap.Render(b.String())
 
 	case tabNews:
@@ -216,4 +215,81 @@ func (m Model) detailContent(w int) string {
 		return wrap.Render(b.String())
 	}
 	return ""
+}
+
+// referencesSection renders the "what changed" fallback for a package: version
+// interpretation, upstream release notes, and packaging source links.
+func (m Model) referencesSection(c data.PackageChange, hasClog bool) string {
+	muted := lipgloss.NewStyle().Foreground(colMuted)
+	link := lipgloss.NewStyle().Foreground(colAccent)
+
+	var b strings.Builder
+	heading := "What changed"
+	if hasClog {
+		heading = "References"
+	}
+	b.WriteString("\n" + labelStyle.Render(heading) + "\n")
+
+	st, seen := m.refs[c.Name]
+	if !seen || st.loading {
+		b.WriteString(muted.Render("loading…"))
+		return b.String()
+	}
+	r := st.ref
+
+	if r.VersionNote != "" {
+		note := r.VersionNote
+		if r.IsRebuild {
+			note = lipgloss.NewStyle().Foreground(colWarn).Render(note)
+		}
+		b.WriteString(note + "\n")
+	}
+
+	if !hasClog && !m.online {
+		b.WriteString(muted.Render("Offline (--no-news): showing links only.\n"))
+	}
+
+	if r.Release != nil {
+		b.WriteString("\n" + detailTitleStyle.Render("Upstream release: "+r.Release.Title) + "\n")
+		if r.Release.URL != "" {
+			b.WriteString(link.Render(r.Release.URL) + "\n")
+		}
+		if r.Release.Body != "" {
+			b.WriteString("\n" + r.Release.Body + "\n")
+		}
+	} else if m.online && !r.IsRebuild {
+		b.WriteString(muted.Render("No upstream release notes found for this version.\n"))
+	}
+
+	b.WriteString("\n" + labelStyle.Render("Sources") + "\n")
+	if r.UpstreamURL != "" {
+		b.WriteString(muted.Render("Upstream:   ") + link.Render(r.UpstreamURL) + "\n")
+	}
+	if r.PackagingURL != "" {
+		b.WriteString(muted.Render(pad(r.PackagingLabel)) + link.Render(r.PackagingURL) + "\n")
+	}
+	if r.CachyOSURL != "" {
+		b.WriteString(muted.Render("CachyOS:    ") + link.Render(r.CachyOSURL) + "\n")
+	}
+
+	if len(r.PackagingCommits) > 0 {
+		b.WriteString("\n" + labelStyle.Render("Recent packaging commits") + "\n")
+		for _, msg := range r.PackagingCommits {
+			b.WriteString(muted.Render("• ") + msg + "\n")
+		}
+	}
+
+	return b.String()
+}
+
+// pad right-pads a sources label to align the links.
+func pad(label string) string {
+	label += ":"
+	for lipgloss.Width(label) < 12 {
+		label += " "
+	}
+	if !strings.HasSuffix(label, " ") {
+		label += " "
+	}
+	return label
 }

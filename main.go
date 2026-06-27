@@ -37,7 +37,7 @@ func main() {
 		feeds = nil
 	}
 
-	m := tui.New(sessions, pacnew, feeds)
+	m := tui.New(sessions, pacnew, feeds, !*noNews)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "arch-update-notes: %v\n", err)

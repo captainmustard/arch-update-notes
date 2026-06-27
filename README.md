@@ -11,6 +11,13 @@ It pulls together four things:
   last update session, parsed from `/var/log/pacman.log`, with old → new versions.
 - **Changelogs** — per-package changelog via `pacman -Qc` (loaded on demand; many
   packages ship none).
+- **"What changed" references** — because most packages have no local changelog,
+  the detail pane falls back to: an interpretation of the version delta
+  (flagging pure **rebuilds**, e.g. `1.6.58-1.1 → 1.6.58-2.1`, where there's no
+  upstream code change), upstream **release notes** fetched from GitHub/GitLab
+  for the new version, the upstream homepage, and the packaging source (Arch
+  GitLab / AUR) with its recent commit subjects — the latter is what explains a
+  rebuild. Fetched lazily on selection; `--no-news` shows links only.
 - **News** — recent Arch Linux and CachyOS announcements, with a `[NEW]` tag for
   anything published around the time of the selected update. These are where
   manual-intervention and breaking-change warnings live.

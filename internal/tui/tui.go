@@ -42,6 +42,7 @@ type Model struct {
 	sessions []data.Session
 	cur      int // index into sessions; latest is len-1
 	feeds    []data.Feed
+	online   bool
 
 	active tab
 
@@ -56,8 +57,8 @@ type Model struct {
 
 	pacnew []string
 
-	clog        map[string]clog // changelog cache keyed by package name
-	lastPkg     string
+	clog map[string]clog // changelog cache keyed by package name
+	refs map[string]refState
 }
 
 type clog struct {
@@ -66,9 +67,15 @@ type clog struct {
 	loading bool
 }
 
+type refState struct {
+	ref     data.Reference
+	done    bool
+	loading bool
+}
+
 // New builds a Model from already-collected local data. News is fetched
 // asynchronously after start.
-func New(sessions []data.Session, pacnew []string, feeds []data.Feed) Model {
+func New(sessions []data.Session, pacnew []string, feeds []data.Feed, online bool) Model {
 	del := compactDelegate{}
 	mk := func() list.Model {
 		l := list.New(nil, del, 0, 0)
@@ -84,13 +91,15 @@ func New(sessions []data.Session, pacnew []string, feeds []data.Feed) Model {
 		sessions:    sessions,
 		cur:         len(sessions) - 1,
 		feeds:       feeds,
+		online:      online,
 		active:      tabPackages,
 		pkgList:     mk(),
 		newsList:    mk(),
 		pacnewList:  mk(),
 		pacnew:      pacnew,
-		newsLoading: true,
+		newsLoading: len(feeds) > 0,
 		clog:        map[string]clog{},
+		refs:        map[string]refState{},
 	}
 	m.populatePacnew()
 	m.populatePackages()
@@ -114,6 +123,11 @@ type clogMsg struct {
 	ok   bool
 }
 
+type refsMsg struct {
+	pkg string
+	ref data.Reference
+}
+
 func fetchNewsCmd(feeds []data.Feed) tea.Cmd {
 	return func() tea.Msg {
 		items, errs := data.FetchNews(feeds, 10*time.Second, 12)
@@ -128,6 +142,12 @@ func fetchClogCmd(pkg string) tea.Cmd {
 	}
 }
 
+func fetchRefsCmd(c data.PackageChange, online bool) tea.Cmd {
+	return func() tea.Msg {
+		return refsMsg{pkg: c.Name, ref: data.GatherReferences(c, online)}
+	}
+}
+
 // --- update ---
 
 func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
@@ -135,9 +155,13 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := message.(type) {
 	case tea.WindowSizeMsg:
+		wasReady := m.ready
 		m.width, m.height = msg.Width, msg.Height
 		m.layout()
 		m.ready = true
+		if !wasReady {
+			cmds = append(cmds, m.loadSelection()...)
+		}
 
 	case newsMsg:
 		m.newsLoading = false
@@ -156,6 +180,12 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		c.loading = false
 		c.text, c.ok = msg.text, msg.ok
 		m.clog[msg.pkg] = c
+		if m.active == tabPackages && m.selectedPkgName() == msg.pkg {
+			m.refreshDetail()
+		}
+
+	case refsMsg:
+		m.refs[msg.pkg] = refState{ref: msg.ref, done: true}
 		if m.active == tabPackages && m.selectedPkgName() == msg.pkg {
 			m.refreshDetail()
 		}
@@ -214,8 +244,8 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		var c tea.Cmd
 		m.pkgList, c = m.pkgList.Update(message)
 		cmds = append(cmds, c)
-		if name := m.selectedPkgName(); name != prev {
-			cmds = append(cmds, m.ensureClog(name)...)
+		if m.selectedPkgName() != prev {
+			cmds = append(cmds, m.loadSelection()...)
 		}
 		m.refreshDetail()
 	case tabNews:
@@ -233,10 +263,10 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// afterNav refreshes the detail pane and loads a changelog after a tab switch.
+// afterNav refreshes the detail pane and loads data after a tab switch.
 func (m *Model) afterNav(cmds *[]tea.Cmd) {
 	if m.active == tabPackages {
-		*cmds = append(*cmds, m.ensureClog(m.selectedPkgName())...)
+		*cmds = append(*cmds, m.loadSelection()...)
 	}
 	m.refreshDetail()
 }
@@ -245,21 +275,28 @@ func (m *Model) onSessionChange(cmds *[]tea.Cmd) {
 	m.populatePackages()
 	m.populateNews() // recompute [NEW] tags relative to the new session
 	if m.active == tabPackages {
-		*cmds = append(*cmds, m.ensureClog(m.selectedPkgName())...)
+		*cmds = append(*cmds, m.loadSelection()...)
 	}
 	m.refreshDetail()
 }
 
-// ensureClog returns a command to load a package changelog if not cached.
-func (m *Model) ensureClog(pkg string) []tea.Cmd {
-	if pkg == "" {
+// loadSelection lazily loads the changelog and references for the currently
+// selected package.
+func (m *Model) loadSelection() []tea.Cmd {
+	c, ok := m.selectedPkg()
+	if !ok {
 		return nil
 	}
-	if _, seen := m.clog[pkg]; seen {
-		return nil
+	var cmds []tea.Cmd
+	if _, seen := m.clog[c.Name]; !seen {
+		m.clog[c.Name] = clog{loading: true}
+		cmds = append(cmds, fetchClogCmd(c.Name))
 	}
-	m.clog[pkg] = clog{loading: true}
-	return []tea.Cmd{fetchClogCmd(pkg)}
+	if _, seen := m.refs[c.Name]; !seen {
+		m.refs[c.Name] = refState{loading: true}
+		cmds = append(cmds, fetchRefsCmd(c, m.online))
+	}
+	return cmds
 }
 
 func (m Model) curSession() (data.Session, bool) {
@@ -274,6 +311,13 @@ func (m Model) selectedPkgName() string {
 		return it.c.Name
 	}
 	return ""
+}
+
+func (m Model) selectedPkg() (data.PackageChange, bool) {
+	if it, ok := m.pkgList.SelectedItem().(pkgItem); ok {
+		return it.c, true
+	}
+	return data.PackageChange{}, false
 }
 
 func (m Model) activeList() list.Model {
