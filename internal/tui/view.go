@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 
 	"github.com/ianataylor42/arch-update-notes/internal/data"
 )
@@ -54,7 +55,7 @@ func (m Model) View() string {
 		return "Loading…"
 	}
 	body := lipgloss.JoinHorizontal(lipgloss.Top, m.listPane(), m.detailPane())
-	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body, m.footerView())
+	return zone.Scan(lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body, m.footerView()))
 }
 
 func (m Model) headerView() string {
@@ -79,10 +80,11 @@ func (m Model) headerView() string {
 				label += fmt.Sprintf(" %d", len(s.Changes))
 			}
 		}
+		id := fmt.Sprintf("tab-%d", int(t))
 		if t == m.active {
-			tabs = append(tabs, tabActiveStyle.Render(label))
+			tabs = append(tabs, zone.Mark(id, tabActiveStyle.Render(label)))
 		} else {
-			tabs = append(tabs, tabStyle.Render(label))
+			tabs = append(tabs, zone.Mark(id, tabStyle.Render(label)))
 		}
 	}
 	tabBar := strings.Join(tabs, "")
@@ -111,7 +113,10 @@ func (m Model) sessionLine() string {
 		parts = append(parts, fmt.Sprintf("~%d", o))
 	}
 	counts := strings.Join(parts, " ")
-	return sessionStyle.Render(fmt.Sprintf("  %s · %s · %s  [ ]/np to switch", when, counts, pos))
+	prev := zone.Mark("sess-prev", sessionStyle.Render("‹prev"))
+	next := zone.Mark("sess-next", sessionStyle.Render("next›"))
+	line := sessionStyle.Render(fmt.Sprintf("  %s · %s · %s  ", when, counts, pos))
+	return line + prev + sessionStyle.Render(" ") + next
 }
 
 func (m Model) listPane() string {
@@ -121,175 +126,201 @@ func (m Model) listPane() string {
 	}
 	style := paneStyle
 	style = style.Width(lw - 2).Height(m.detail.Height)
-	return style.Render(m.activeList().View())
+	return zone.Mark("listpane", style.Render(m.activeList().View()))
 }
 
 func (m Model) detailPane() string {
 	style := paneActiveStyle
 	style = style.Width(m.detail.Width).Height(m.detail.Height)
-	return style.Render(m.detail.View())
+	return zone.Mark("detailpane", style.Render(m.detail.View()))
 }
 
 func (m Model) footerView() string {
-	help := "↑/↓ move · tab sections · [ ]/np updates · / filter · PgUp/PgDn scroll · q quit"
-	return footerStyle.Render(" " + help)
+	help := "↑/↓ move · tab/click sections · [ ]/np updates · / filter · PgUp/PgDn·g/G scroll · q quit"
+	left := footerStyle.Render(" " + help)
+	if !m.loadingActive() {
+		return left
+	}
+	ind := m.indicatorView()
+	gap := m.width - lipgloss.Width(left) - lipgloss.Width(ind) - 1
+	if gap < 1 {
+		gap = 1
+	}
+	return left + strings.Repeat(" ", gap) + ind
 }
 
 // --- detail content ---
 
+// refreshDetail re-renders the detail pane only when its content signature
+// changes, keeping the YOffset (and any in-flight scroll animation) intact.
 func (m *Model) refreshDetail() {
-	m.detail.SetContent(m.detailContent(m.detail.Width))
+	sig := m.detailSignature()
+	if sig == m.detailSig {
+		return
+	}
+	m.detailSig = sig
+	m.detail.SetContent(m.detailContent())
+	m.snapScroll()
 }
 
-func (m Model) detailContent(w int) string {
-	if w < 4 {
-		w = 4
-	}
-	wrap := lipgloss.NewStyle().Width(w)
-
+func (m Model) detailSignature() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d|%d|%d|%v|%v", m.active, m.cur, m.detail.Width, m.online, m.newsLoading)
 	switch m.active {
 	case tabPackages:
-		it, ok := m.pkgList.SelectedItem().(pkgItem)
-		if !ok {
-			return wrap.Render("No package changes in this update session.")
+		if c, ok := m.selectedPkg(); ok {
+			cl := m.clog[c.Name]
+			r := m.refs[c.Name]
+			fmt.Fprintf(&b, "|pkg:%s|cl:%v,%v|rf:%v,%v", c.Name, cl.loading, cl.ok, r.loading, r.done)
 		}
-		c := it.c
-		var b strings.Builder
-		b.WriteString(detailTitleStyle.Render(c.Name) + "\n")
-		b.WriteString(labelStyle.Render("Action:  ") + lipgloss.NewStyle().Foreground(actionColor(string(c.Action))).Render(string(c.Action)) + "\n")
-		b.WriteString(labelStyle.Render("Version: ") + c.Version() + "\n")
-		if !c.When.IsZero() {
-			b.WriteString(labelStyle.Render("When:    ") + c.When.Format("2006-01-02 15:04:05") + "\n")
+	case tabNews:
+		if it, ok := m.newsList.SelectedItem().(newsItem); ok {
+			fmt.Fprintf(&b, "|news:%s", it.n.Link)
 		}
-		cl, seen := m.clog[c.Name]
-		hasClog := seen && cl.ok
-		if hasClog {
-			b.WriteString("\n" + labelStyle.Render("Changelog") + "\n")
-			b.WriteString(cl.text + "\n")
+	case tabPacnew:
+		if it, ok := m.pacnewList.SelectedItem().(pacnewItem); ok {
+			fmt.Fprintf(&b, "|pn:%s", it.path)
 		}
-		b.WriteString(m.referencesSection(c, hasClog))
-		return wrap.Render(b.String())
+	}
+	return b.String()
+}
 
+func (m *Model) detailContent() string {
+	switch m.active {
+	case tabPackages:
+		c, ok := m.selectedPkg()
+		if !ok {
+			return m.plain("No package changes in this update session.")
+		}
+		return m.mdRender(m.packageMarkdown(c))
 	case tabNews:
 		if m.newsLoading {
-			return wrap.Render(lipgloss.NewStyle().Foreground(colMuted).Render("Fetching news…"))
+			return m.plain("Fetching news…")
 		}
 		it, ok := m.newsList.SelectedItem().(newsItem)
 		if !ok {
-			msg := "No news items."
 			if m.newsErr != "" {
-				msg = "Could not load news: " + m.newsErr
+				return m.plain("Could not load news: " + m.newsErr)
 			}
-			return wrap.Render(lipgloss.NewStyle().Foreground(colMuted).Render(msg))
+			return m.plain("No news items.")
 		}
-		n := it.n
-		var b strings.Builder
-		b.WriteString(detailTitleStyle.Render(n.Title) + "\n")
-		b.WriteString(labelStyle.Render("Source: ") + n.Source + "\n")
-		if !n.Date.IsZero() {
-			b.WriteString(labelStyle.Render("Date:   ") + n.Date.Format("2006-01-02") + "\n")
-		}
-		if n.Link != "" {
-			b.WriteString(labelStyle.Render("Link:   ") + lipgloss.NewStyle().Foreground(colAccent).Render(n.Link) + "\n")
-		}
-		b.WriteString("\n" + n.Summary)
-		return wrap.Render(b.String())
-
+		return m.mdRender(newsMarkdown(it.n))
 	case tabPacnew:
 		if len(m.pacnew) == 0 {
-			return wrap.Render(lipgloss.NewStyle().Foreground(colNew).Render("No .pacnew or .pacsave files pending. Nothing to merge."))
+			return m.plain("No .pacnew or .pacsave files pending. Nothing to merge.")
 		}
 		it, ok := m.pacnewList.SelectedItem().(pacnewItem)
 		if !ok {
-			return wrap.Render("Select a config file.")
+			return m.plain("Select a config file.")
 		}
-		var b strings.Builder
-		b.WriteString(detailTitleStyle.Render(it.path) + "\n\n")
-		b.WriteString("This update shipped a new default for a config file you've modified. " +
-			"The package manager saved the new version alongside yours so nothing was overwritten.\n\n")
-		b.WriteString(labelStyle.Render("Merge it with:") + "\n")
-		b.WriteString(lipgloss.NewStyle().Foreground(colAccent).Render("  sudo pacdiff") + "\n\n")
-		b.WriteString(lipgloss.NewStyle().Foreground(colMuted).Render(
-			"pacdiff walks each file interactively (view diff, merge, keep, or remove). " +
-				"All pending files are listed on the left."))
-		return wrap.Render(b.String())
+		return m.mdRender(pacnewMarkdown(it.path))
 	}
 	return ""
 }
 
-// referencesSection renders the "what changed" fallback for a package: version
-// interpretation, upstream release notes, and packaging source links.
-func (m Model) referencesSection(c data.PackageChange, hasClog bool) string {
-	muted := lipgloss.NewStyle().Foreground(colMuted)
-	link := lipgloss.NewStyle().Foreground(colAccent)
+// plain renders a short status message (no markdown) wrapped to the pane width.
+func (m Model) plain(s string) string {
+	return lipgloss.NewStyle().Width(m.detail.Width).Foreground(colMuted).Render(s)
+}
 
+func (m Model) packageMarkdown(c data.PackageChange) string {
 	var b strings.Builder
-	heading := "What changed"
-	if hasClog {
-		heading = "References"
+	fmt.Fprintf(&b, "# %s\n\n", c.Name)
+	fmt.Fprintf(&b, "**%s** · `%s`", c.Action, c.Version())
+	if !c.When.IsZero() {
+		fmt.Fprintf(&b, " · %s", c.When.Format("2006-01-02 15:04"))
 	}
-	b.WriteString("\n" + labelStyle.Render(heading) + "\n")
+	b.WriteString("\n\n")
+
+	cl, seen := m.clog[c.Name]
+	hasClog := seen && cl.ok
+	if hasClog {
+		b.WriteString("**Changelog**\n\n```\n" + cl.text + "\n```\n\n")
+	}
+	b.WriteString(m.referencesMarkdown(c, hasClog))
+	return b.String()
+}
+
+// referencesMarkdown is the "what changed" fallback as a markdown fragment.
+func (m Model) referencesMarkdown(c data.PackageChange, hasClog bool) string {
+	var b strings.Builder
+	if hasClog {
+		b.WriteString("**References**\n\n")
+	} else {
+		b.WriteString("**What changed**\n\n")
+	}
 
 	st, seen := m.refs[c.Name]
 	if !seen || st.loading {
-		b.WriteString(muted.Render("loading…"))
+		b.WriteString("_loading…_\n")
 		return b.String()
 	}
 	r := st.ref
 
 	if r.VersionNote != "" {
-		note := r.VersionNote
 		if r.IsRebuild {
-			note = lipgloss.NewStyle().Foreground(colWarn).Render(note)
+			b.WriteString("> " + r.VersionNote + "\n\n")
+		} else {
+			b.WriteString(r.VersionNote + "\n\n")
 		}
-		b.WriteString(note + "\n")
 	}
-
 	if !hasClog && !m.online {
-		b.WriteString(muted.Render("Offline (--no-news): showing links only.\n"))
+		b.WriteString("_Offline (--no-news): showing links only._\n\n")
 	}
 
 	if r.Release != nil {
-		b.WriteString("\n" + detailTitleStyle.Render("Upstream release: "+r.Release.Title) + "\n")
+		fmt.Fprintf(&b, "**Upstream release: %s**\n\n", r.Release.Title)
 		if r.Release.URL != "" {
-			b.WriteString(link.Render(r.Release.URL) + "\n")
+			b.WriteString("<" + r.Release.URL + ">\n\n")
 		}
 		if r.Release.Body != "" {
-			b.WriteString("\n" + r.Release.Body + "\n")
+			b.WriteString(r.Release.Body + "\n\n")
 		}
 	} else if m.online && !r.IsRebuild {
-		b.WriteString(muted.Render("No upstream release notes found for this version.\n"))
+		b.WriteString("_No upstream release notes found for this version._\n\n")
 	}
 
-	b.WriteString("\n" + labelStyle.Render("Sources") + "\n")
+	b.WriteString("**Sources**\n\n")
 	if r.UpstreamURL != "" {
-		b.WriteString(muted.Render("Upstream:   ") + link.Render(r.UpstreamURL) + "\n")
+		fmt.Fprintf(&b, "- **Upstream:** <%s>\n", r.UpstreamURL)
 	}
 	if r.PackagingURL != "" {
-		b.WriteString(muted.Render(pad(r.PackagingLabel)) + link.Render(r.PackagingURL) + "\n")
+		fmt.Fprintf(&b, "- **%s:** <%s>\n", r.PackagingLabel, r.PackagingURL)
 	}
 	if r.CachyOSURL != "" {
-		b.WriteString(muted.Render("CachyOS:    ") + link.Render(r.CachyOSURL) + "\n")
+		fmt.Fprintf(&b, "- **CachyOS:** <%s>\n", r.CachyOSURL)
 	}
 
 	if len(r.PackagingCommits) > 0 {
-		b.WriteString("\n" + labelStyle.Render("Recent packaging commits") + "\n")
+		b.WriteString("\n**Recent packaging commits**\n\n")
 		for _, msg := range r.PackagingCommits {
-			b.WriteString(muted.Render("• ") + msg + "\n")
+			b.WriteString("- " + msg + "\n")
 		}
 	}
-
 	return b.String()
 }
 
-// pad right-pads a sources label to align the links.
-func pad(label string) string {
-	label += ":"
-	for lipgloss.Width(label) < 12 {
-		label += " "
+func newsMarkdown(n data.NewsItem) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s\n\n", n.Title)
+	fmt.Fprintf(&b, "**%s**", n.Source)
+	if !n.Date.IsZero() {
+		fmt.Fprintf(&b, " · %s", n.Date.Format("2006-01-02"))
 	}
-	if !strings.HasSuffix(label, " ") {
-		label += " "
+	b.WriteString("\n\n")
+	if n.Link != "" {
+		b.WriteString("<" + n.Link + ">\n\n")
 	}
-	return label
+	b.WriteString(n.Summary + "\n")
+	return b.String()
+}
+
+func pacnewMarkdown(path string) string {
+	return fmt.Sprintf("# %s\n\n"+
+		"This update shipped a new default for a config file you've modified. "+
+		"The package manager saved the new version alongside yours so nothing was overwritten.\n\n"+
+		"**Merge it with:**\n\n"+
+		"```\nsudo pacdiff\n```\n\n"+
+		"_pacdiff walks each file interactively (view diff, merge, keep, or remove). "+
+		"All pending files are listed on the left._\n", path)
 }

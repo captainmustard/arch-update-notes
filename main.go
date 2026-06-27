@@ -10,6 +10,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 
 	"github.com/ianataylor42/arch-update-notes/internal/data"
 	"github.com/ianataylor42/arch-update-notes/internal/tui"
@@ -37,8 +38,9 @@ func main() {
 		feeds = nil
 	}
 
+	zone.NewGlobal()
 	m := tui.New(sessions, pacnew, feeds, !*noNews)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "arch-update-notes: %v\n", err)
 		os.Exit(1)

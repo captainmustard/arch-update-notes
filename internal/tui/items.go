@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/muesli/reflow/truncate"
 
 	"github.com/ianataylor42/arch-update-notes/internal/data"
@@ -48,13 +49,14 @@ func (d compactDelegate) Render(w io.Writer, m list.Model, index int, item list.
 		cursor = lipgloss.NewStyle().Foreground(colAccent).Render("▌ ")
 	}
 
-	var line string
+	var line, prefix string
 	switch it := item.(type) {
 	case pkgItem:
 		glyph := lipgloss.NewStyle().Foreground(actionColor(string(it.c.Action))).Render(actionGlyph(string(it.c.Action)))
 		name := it.c.Name
 		ver := lipgloss.NewStyle().Foreground(colMuted).Render(it.c.Version())
 		line = fmt.Sprintf("%s %s  %s", glyph, name, ver)
+		prefix = rowPkg
 	case newsItem:
 		tag := ""
 		if it.isNew {
@@ -62,8 +64,10 @@ func (d compactDelegate) Render(w io.Writer, m list.Model, index int, item list.
 		}
 		src := lipgloss.NewStyle().Foreground(colMuted).Render("(" + it.n.Source + ")")
 		line = fmt.Sprintf("%s %s%s", src, it.n.Title, tag)
+		prefix = rowNews
 	case pacnewItem:
 		line = lipgloss.NewStyle().Foreground(colWarn).Render("⚠ ") + it.path
+		prefix = rowPacnew
 	}
 
 	full := cursor + line
@@ -74,5 +78,12 @@ func (d compactDelegate) Render(w io.Writer, m list.Model, index int, item list.
 	if width > 0 {
 		full = truncate.StringWithTail(full, uint(width), "…")
 	}
-	io.WriteString(w, full)
+	io.WriteString(w, zone.Mark(fmt.Sprintf("%s%d", prefix, index), full))
 }
+
+// row zone id prefixes for each list.
+const (
+	rowPkg    = "row-pkg-"
+	rowNews   = "row-news-"
+	rowPacnew = "row-pacnew-"
+)

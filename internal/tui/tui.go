@@ -9,6 +9,8 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/harmonica"
 
 	"github.com/ianataylor42/arch-update-notes/internal/data"
 )
@@ -59,6 +61,21 @@ type Model struct {
 
 	clog map[string]clog // changelog cache keyed by package name
 	refs map[string]refState
+
+	md        *glamour.TermRenderer
+	mdWidth   int
+	detailSig string // signature of the currently rendered detail content
+
+	// animation (harmonica)
+	spring      harmonica.Spring
+	springReady bool
+	sPos, sVel  float64 // detail scroll position/velocity (lines)
+	sTarget     float64 // detail scroll target (lines)
+	scrolling   bool
+	indPhase    float64 // fetch indicator phase 0..1
+	indVel      float64
+	indTarget   float64
+	tickInFlight bool
 }
 
 type clog struct {
@@ -157,11 +174,19 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		wasReady := m.ready
 		m.width, m.height = msg.Width, msg.Height
+		m.initSpring()
 		m.layout()
 		m.ready = true
 		if !wasReady {
 			cmds = append(cmds, m.loadSelection()...)
+			cmds = append(cmds, m.ensureTick())
 		}
+
+	case tickMsg:
+		return m, m.handleTick()
+
+	case tea.MouseMsg:
+		return m, m.handleMouse(msg)
 
 	case newsMsg:
 		m.newsLoading = false
@@ -230,10 +255,18 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				m.onSessionChange(&cmds)
 			}
 			return m, tea.Batch(cmds...)
-		case "pgup", "pgdown", "u", "d", "ctrl+u", "ctrl+d":
-			var c tea.Cmd
-			m.detail, c = m.detail.Update(message)
-			return m, c
+		case "pgdown", " ":
+			return m, m.scrollBy(float64(m.detail.Height - 1))
+		case "pgup":
+			return m, m.scrollBy(-float64(m.detail.Height - 1))
+		case "d", "ctrl+d":
+			return m, m.scrollBy(float64(m.detail.Height / 2))
+		case "u", "ctrl+u":
+			return m, m.scrollBy(-float64(m.detail.Height / 2))
+		case "g", "home":
+			return m, m.scrollBy(-m.maxScroll() - 1)
+		case "G", "end":
+			return m, m.scrollBy(m.maxScroll() + 1)
 		}
 	}
 
@@ -246,6 +279,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, c)
 		if m.selectedPkgName() != prev {
 			cmds = append(cmds, m.loadSelection()...)
+			cmds = append(cmds, m.ensureTick())
 		}
 		m.refreshDetail()
 	case tabNews:
@@ -267,6 +301,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) afterNav(cmds *[]tea.Cmd) {
 	if m.active == tabPackages {
 		*cmds = append(*cmds, m.loadSelection()...)
+		*cmds = append(*cmds, m.ensureTick())
 	}
 	m.refreshDetail()
 }
@@ -276,6 +311,7 @@ func (m *Model) onSessionChange(cmds *[]tea.Cmd) {
 	m.populateNews() // recompute [NEW] tags relative to the new session
 	if m.active == tabPackages {
 		*cmds = append(*cmds, m.loadSelection()...)
+		*cmds = append(*cmds, m.ensureTick())
 	}
 	m.refreshDetail()
 }
@@ -328,6 +364,28 @@ func (m Model) activeList() list.Model {
 		return m.pacnewList
 	default:
 		return m.pkgList
+	}
+}
+
+func (m *Model) activeListPtr() *list.Model {
+	switch m.active {
+	case tabNews:
+		return &m.newsList
+	case tabPacnew:
+		return &m.pacnewList
+	default:
+		return &m.pkgList
+	}
+}
+
+func (m Model) rowPrefix() string {
+	switch m.active {
+	case tabNews:
+		return rowNews
+	case tabPacnew:
+		return rowPacnew
+	default:
+		return rowPkg
 	}
 }
 

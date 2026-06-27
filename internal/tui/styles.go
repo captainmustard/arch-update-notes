@@ -40,6 +40,7 @@ var (
 	labelStyle       = lipgloss.NewStyle().Bold(true).Foreground(colMuted)
 	newTagStyle      = lipgloss.NewStyle().Bold(true).Foreground(colNew)
 	footerStyle      = lipgloss.NewStyle().Foreground(colMuted)
+	indicatorStyle   = lipgloss.NewStyle().Foreground(colAccent)
 )
 
 // actionColor maps a pacman action to a display colour.

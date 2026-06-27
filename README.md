@@ -25,7 +25,15 @@ It pulls together four things:
   the update left for you to merge, with the command to do it.
 
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and
-[Bubbles](https://github.com/charmbracelet/bubbles).
+[Bubbles](https://github.com/charmbracelet/bubbles), with Markdown rendering by
+[Glamour](https://github.com/charmbracelet/glamour) (the engine behind `glow`),
+mouse support via [bubblezone](https://github.com/lrstanley/bubblezone), and
+spring animations from [Harmonica](https://github.com/charmbracelet/harmonica).
+
+The detail pane renders release notes and changelogs as proper Markdown.
+Everything is mouse-aware — click the section tabs, click a row to select it,
+click `‹prev`/`next›` to move between updates, and scroll either pane with the
+wheel. Detail scrolling and the "fetching" indicator are spring-animated.
 
 ## Install / build
 
@@ -65,7 +73,8 @@ recent session; use `[` / `]` to browse earlier ones.
 | `1` `2` `3` | Jump to a section |
 | `[` / `]`, `p` / `n` | Previous / next update session |
 | `/` | Filter the current list |
-| `PgUp` / `PgDn` | Scroll the detail pane |
+| `PgUp` / `PgDn`, `u` / `d`, `g` / `G` | Scroll the detail pane (page / half-page / top / bottom) |
+| mouse | Click tabs, rows, and `‹prev`/`next›`; wheel scrolls the hovered pane |
 | `q`, `ctrl+c` | Quit |
 
 ## Notes
