@@ -17,9 +17,20 @@ It pulls together, for the last update session:
 - **News** — recent Arch and CachyOS announcements, `[NEW]`-tagged around the
   update date — where manual-intervention warnings live.
 - **Config files** — pending `.pacnew` / `.pacsave` files (via `pacdiff -o`).
+- **Snapshots** — if you use snapper + snap-pac on btrfs, the pre/post snapshot
+  for each transaction, with the rollback/undo commands. Sessions that have a
+  snapshot are flagged with `❄` in the Packages view.
 
 Detail panes render as Markdown, URLs are clickable (open in your browser), and
-it's fully mouse-aware. The app is read-only — it never touches your system.
+it's fully mouse-aware. The app is read-only — it never touches your system
+(snapshot rollback commands are shown for you to run, never executed).
+
+Snapshots are root-only on a default snapper setup, so run `sudo arch-update-notes`
+to see them, or let your user read the `root` config:
+
+```sh
+sudo snapper -c root set-config ALLOW_GROUPS=wheel SYNC_ACL=yes
+```
 
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea),
 [Glamour](https://github.com/charmbracelet/glamour),
@@ -32,9 +43,9 @@ Prebuilt Linux binaries (amd64 / arm64) are on the
 [Releases](https://github.com/captainmustard/arch-update-notes/releases) page:
 
 ```sh
-curl -LO https://github.com/captainmustard/arch-update-notes/releases/latest/download/arch-update-notes-v0.1.0-linux-amd64
-chmod +x arch-update-notes-v0.1.0-linux-amd64
-sudo install arch-update-notes-v0.1.0-linux-amd64 /usr/local/bin/arch-update-notes
+curl -LO https://github.com/captainmustard/arch-update-notes/releases/latest/download/arch-update-notes-v0.2.0-linux-amd64
+chmod +x arch-update-notes-v0.2.0-linux-amd64
+sudo install arch-update-notes-v0.2.0-linux-amd64 /usr/local/bin/arch-update-notes
 ```
 
 Or build from source (Go 1.24+; `pacman-contrib` enables `.pacnew` detection):
@@ -57,7 +68,7 @@ on the latest and `[` / `]` browse earlier ones. `--no-news` runs fully offline.
 | Key | Action |
 | --- | --- |
 | `↑`/`↓` `j`/`k` | Move selection |
-| `tab` / `1` `2` `3` | Switch section |
+| `tab` / `1`–`4` | Switch section (Packages / News / Config files / Snapshots) |
 | `[` / `]` | Previous / next update session |
 | `/` | Filter |
 | `PgUp`/`PgDn` `u`/`d` `g`/`G` | Scroll detail |

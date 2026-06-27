@@ -41,6 +41,7 @@ func main() {
 	}
 
 	pacnew, _ := data.PacnewFiles()
+	snaps := data.LoadSnapshots("root")
 
 	feeds := data.DefaultFeeds
 	if *noNews {
@@ -48,7 +49,7 @@ func main() {
 	}
 
 	zone.NewGlobal()
-	m := tui.New(sessions, pacnew, feeds, !*noNews)
+	m := tui.New(sessions, pacnew, feeds, snaps, !*noNews)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "arch-update-notes: %v\n", err)

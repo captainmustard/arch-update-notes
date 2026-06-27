@@ -75,6 +75,10 @@ func (m Model) headerView() string {
 			if n := len(m.pacnew); n > 0 {
 				label += fmt.Sprintf(" %d", n)
 			}
+		case tabSnapshots:
+			if m.snaps.Available {
+				label += fmt.Sprintf(" %d", len(m.snaps.Pairs))
+			}
 		case tabPackages:
 			if s, ok := m.curSession(); ok {
 				label += fmt.Sprintf(" %d", len(s.Changes))
@@ -113,6 +117,11 @@ func (m Model) sessionLine() string {
 		parts = append(parts, fmt.Sprintf("~%d", o))
 	}
 	counts := strings.Join(parts, " ")
+	if m.snaps.Available {
+		if sp := data.PairsForSession(s, m.snaps.Pairs); len(sp) > 0 {
+			counts += lipgloss.NewStyle().Foreground(colAccent).Render(fmt.Sprintf(" ❄%d", len(sp)))
+		}
+	}
 	prev := zone.Mark("sess-prev", sessionStyle.Render("‹prev"))
 	next := zone.Mark("sess-next", sessionStyle.Render("next›"))
 	line := sessionStyle.Render(fmt.Sprintf("  %s · %s · %s  ", when, counts, pos))
@@ -181,6 +190,11 @@ func (m Model) detailSignature() string {
 		if it, ok := m.pacnewList.SelectedItem().(pacnewItem); ok {
 			fmt.Fprintf(&b, "|pn:%s", it.path)
 		}
+	case tabSnapshots:
+		fmt.Fprintf(&b, "|snapavail:%v", m.snaps.Available)
+		if it, ok := m.snapList.SelectedItem().(snapItem); ok {
+			fmt.Fprintf(&b, "|snap:%d-%d", it.p.Pre.Number, it.p.Post.Number)
+		}
 	}
 	return b.String()
 }
@@ -221,6 +235,27 @@ func (m *Model) detailContent() string {
 			return m.plain("Select a config file.")
 		}
 		return m.mdRender(pacnewMarkdown(it.path))
+	case tabSnapshots:
+		if !m.snaps.Available {
+			reason := m.snaps.Reason
+			if reason == "" {
+				reason = "snapshots unavailable"
+			}
+			return m.mdRender("# Snapshots\n\n_" + reason + "_\n\n" +
+				"This view lists the btrfs snapshots snap-pac takes around each pacman " +
+				"transaction. Reading them needs root.\n\n" +
+				"- Run it with `sudo arch-update-notes`, **or**\n" +
+				"- Allow your user to read the `root` config:\n\n" +
+				"```\nsudo snapper -c root set-config ALLOW_GROUPS=wheel SYNC_ACL=yes\n```\n")
+		}
+		if len(m.snaps.Pairs) == 0 {
+			return m.plain("No snap-pac snapshots found.")
+		}
+		it, ok := m.snapList.SelectedItem().(snapItem)
+		if !ok {
+			return m.plain("Select a snapshot.")
+		}
+		return m.mdRender(snapshotMarkdown(it.p, m.snaps.Config))
 	}
 	return ""
 }
@@ -356,6 +391,43 @@ func newsMarkdown(n data.NewsItem) string {
 	}
 	b.WriteString("\n\n")
 	b.WriteString(n.Summary + "\n")
+	return b.String()
+}
+
+func snapshotMarkdown(p data.SnapPair, config string) string {
+	var b strings.Builder
+	if p.HasPost() {
+		fmt.Fprintf(&b, "# Snapshot %d → %d\n\n", p.Pre.Number, p.Post.Number)
+	} else {
+		fmt.Fprintf(&b, "# Snapshot %d (pre, no post)\n\n", p.Pre.Number)
+	}
+	fmt.Fprintf(&b, "**%s**", p.When().Format("Mon 2 Jan 2006 15:04"))
+	if p.Pre.Cleanup != "" {
+		fmt.Fprintf(&b, " · cleanup: %s", p.Pre.Cleanup)
+	}
+	b.WriteString("\n\n")
+
+	if cmd := p.Command(); cmd != "" {
+		b.WriteString("**Command**\n\n```\n" + cmd + "\n```\n\n")
+	}
+	if sum := p.Summary(); sum != "" && sum != p.Command() {
+		b.WriteString("**Packages**\n\n" + sum + "\n\n")
+	}
+
+	b.WriteString("**Snapshots**\n\n")
+	fmt.Fprintf(&b, "- pre **#%d** — %s\n", p.Pre.Number, p.Pre.Date.Format("2006-01-02 15:04:05"))
+	if p.HasPost() {
+		fmt.Fprintf(&b, "- post **#%d** — %s\n", p.Post.Number, p.Post.Date.Format("2006-01-02 15:04:05"))
+	}
+	b.WriteString("\n")
+
+	if p.HasPost() {
+		b.WriteString("**Roll back** (review, then run yourself)\n\n")
+		fmt.Fprintf(&b, "Undo just this transaction's file changes:\n\n```\nsudo snapper -c %s undochange %d..%d\n```\n\n",
+			config, p.Pre.Number, p.Post.Number)
+		fmt.Fprintf(&b, "Set the system to boot from the pre-update state:\n\n```\nsudo snapper -c %s rollback %d\n```\n",
+			config, p.Pre.Number)
+	}
 	return b.String()
 }
 

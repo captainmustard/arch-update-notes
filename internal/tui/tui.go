@@ -21,6 +21,7 @@ const (
 	tabPackages tab = iota
 	tabNews
 	tabPacnew
+	tabSnapshots
 	numTabs
 )
 
@@ -32,6 +33,8 @@ func (t tab) String() string {
 		return "News"
 	case tabPacnew:
 		return "Config files"
+	case tabSnapshots:
+		return "Snapshots"
 	}
 	return ""
 }
@@ -51,6 +54,7 @@ type Model struct {
 	pkgList    list.Model
 	newsList   list.Model
 	pacnewList list.Model
+	snapList   list.Model
 	detail     viewport.Model
 
 	news        []data.NewsItem
@@ -58,6 +62,7 @@ type Model struct {
 	newsErr     string
 
 	pacnew []string
+	snaps  data.SnapshotInfo
 
 	clog map[string]clog // changelog cache keyed by package name
 	refs map[string]refState
@@ -93,7 +98,7 @@ type refState struct {
 
 // New builds a Model from already-collected local data. News is fetched
 // asynchronously after start.
-func New(sessions []data.Session, pacnew []string, feeds []data.Feed, online bool) Model {
+func New(sessions []data.Session, pacnew []string, feeds []data.Feed, snaps data.SnapshotInfo, online bool) Model {
 	del := compactDelegate{}
 	mk := func() list.Model {
 		l := list.New(nil, del, 0, 0)
@@ -114,12 +119,15 @@ func New(sessions []data.Session, pacnew []string, feeds []data.Feed, online boo
 		pkgList:     mk(),
 		newsList:    mk(),
 		pacnewList:  mk(),
+		snapList:    mk(),
 		pacnew:      pacnew,
+		snaps:       snaps,
 		newsLoading: len(feeds) > 0,
 		clog:        map[string]clog{},
 		refs:        map[string]refState{},
 	}
 	m.populatePacnew()
+	m.populateSnapshots()
 	m.populatePackages()
 	return m
 }
@@ -244,6 +252,10 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.active = tabPacnew
 			m.afterNav(&cmds)
 			return m, tea.Batch(cmds...)
+		case "4":
+			m.active = tabSnapshots
+			m.afterNav(&cmds)
+			return m, tea.Batch(cmds...)
 		case "]", "n":
 			if m.cur < len(m.sessions)-1 {
 				m.cur++
@@ -363,6 +375,8 @@ func (m Model) activeList() list.Model {
 		return m.newsList
 	case tabPacnew:
 		return m.pacnewList
+	case tabSnapshots:
+		return m.snapList
 	default:
 		return m.pkgList
 	}
@@ -374,6 +388,8 @@ func (m *Model) activeListPtr() *list.Model {
 		return &m.newsList
 	case tabPacnew:
 		return &m.pacnewList
+	case tabSnapshots:
+		return &m.snapList
 	default:
 		return &m.pkgList
 	}
@@ -385,6 +401,8 @@ func (m Model) rowPrefix() string {
 		return rowNews
 	case tabPacnew:
 		return rowPacnew
+	case tabSnapshots:
+		return rowSnap
 	default:
 		return rowPkg
 	}
@@ -425,4 +443,12 @@ func (m *Model) populatePacnew() {
 		items = append(items, pacnewItem{path: p})
 	}
 	m.pacnewList.SetItems(items)
+}
+
+func (m *Model) populateSnapshots() {
+	items := make([]list.Item, 0, len(m.snaps.Pairs))
+	for _, p := range m.snaps.Pairs {
+		items = append(items, snapItem{p: p})
+	}
+	m.snapList.SetItems(items)
 }

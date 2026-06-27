@@ -34,6 +34,12 @@ type pacnewItem struct{ path string }
 
 func (i pacnewItem) FilterValue() string { return i.path }
 
+// --- snapshot items ---
+
+type snapItem struct{ p data.SnapPair }
+
+func (i snapItem) FilterValue() string { return i.p.Summary() }
+
 // compactDelegate renders single-line items for all three lists.
 type compactDelegate struct{}
 
@@ -68,6 +74,11 @@ func (d compactDelegate) Render(w io.Writer, m list.Model, index int, item list.
 	case pacnewItem:
 		line = lipgloss.NewStyle().Foreground(colWarn).Render("⚠ ") + it.path
 		prefix = rowPacnew
+	case snapItem:
+		flake := lipgloss.NewStyle().Foreground(colAccent).Render("❄")
+		when := lipgloss.NewStyle().Foreground(colMuted).Render(it.p.When().Format("01-02 15:04"))
+		line = fmt.Sprintf("%s %s  %s", flake, when, it.p.Summary())
+		prefix = rowSnap
 	}
 
 	full := cursor + line
@@ -86,4 +97,5 @@ const (
 	rowPkg    = "row-pkg-"
 	rowNews   = "row-news-"
 	rowPacnew = "row-pacnew-"
+	rowSnap   = "row-snap-"
 )
