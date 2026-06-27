@@ -5,6 +5,8 @@ Arch-based distributions (CachyOS, Arch, EndeavourOS, …). After running
 `cachy-update` / `arch-update` / `pacman -Syu`, launch it to see — in one place —
 what changed and what might need your attention.
 
+![arch-update-notes screenshot](docs/screenshot.png)
+
 It pulls together four things:
 
 - **Packages** — every package upgraded, installed, removed or downgraded in the
