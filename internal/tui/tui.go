@@ -64,7 +64,8 @@ type Model struct {
 
 	md        *glamour.TermRenderer
 	mdWidth   int
-	detailSig string // signature of the currently rendered detail content
+	detailSig string   // signature of the currently rendered detail content
+	curLinks  []string // URLs in the current detail's Links section, by zone index
 
 	// animation (harmonica)
 	spring      harmonica.Spring

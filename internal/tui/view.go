@@ -185,14 +185,17 @@ func (m Model) detailSignature() string {
 	return b.String()
 }
 
+type linkItem struct{ label, url string }
+
 func (m *Model) detailContent() string {
+	m.curLinks = nil
 	switch m.active {
 	case tabPackages:
 		c, ok := m.selectedPkg()
 		if !ok {
 			return m.plain("No package changes in this update session.")
 		}
-		return m.mdRender(m.packageMarkdown(c))
+		return m.compose(m.packageMarkdown(c), m.packageLinks(c))
 	case tabNews:
 		if m.newsLoading {
 			return m.plain("Fetching news…")
@@ -204,7 +207,11 @@ func (m *Model) detailContent() string {
 			}
 			return m.plain("No news items.")
 		}
-		return m.mdRender(newsMarkdown(it.n))
+		var links []linkItem
+		if it.n.Link != "" {
+			links = append(links, linkItem{"Article", it.n.Link})
+		}
+		return m.compose(newsMarkdown(it.n), links)
 	case tabPacnew:
 		if len(m.pacnew) == 0 {
 			return m.plain("No .pacnew or .pacsave files pending. Nothing to merge.")
@@ -216,6 +223,60 @@ func (m *Model) detailContent() string {
 		return m.mdRender(pacnewMarkdown(it.path))
 	}
 	return ""
+}
+
+// compose renders the markdown body via glamour and appends a clickable Links
+// section, recording the URLs in m.curLinks (indexed by zone id).
+func (m *Model) compose(md string, links []linkItem) string {
+	out := m.mdRender(md)
+	if len(links) == 0 {
+		return out
+	}
+	var b strings.Builder
+	b.WriteString(out)
+	b.WriteString("\n\n  " + labelStyle.Render("Links") + "\n")
+	for i, l := range links {
+		id := fmt.Sprintf("link-%d", i)
+		m.curLinks = append(m.curLinks, l.url)
+		label := lipgloss.NewStyle().Foreground(colMuted).Render(pad(l.label))
+		b.WriteString("  " + label + zone.Mark(id, linkStyle.Render(l.url)) + "\n")
+	}
+	b.WriteString("\n  " + lipgloss.NewStyle().Foreground(colMuted).Render("click a link to open it in your browser"))
+	return b.String()
+}
+
+// pad right-pads a links label for alignment.
+func pad(label string) string {
+	label += ":"
+	for lipgloss.Width(label) < 9 {
+		label += " "
+	}
+	if !strings.HasSuffix(label, " ") {
+		label += " "
+	}
+	return label
+}
+
+func (m Model) packageLinks(c data.PackageChange) []linkItem {
+	st, seen := m.refs[c.Name]
+	if !seen || st.loading {
+		return nil
+	}
+	r := st.ref
+	var links []linkItem
+	if r.Release != nil && r.Release.URL != "" {
+		links = append(links, linkItem{"Release", r.Release.URL})
+	}
+	if r.UpstreamURL != "" {
+		links = append(links, linkItem{"Upstream", r.UpstreamURL})
+	}
+	if r.PackagingURL != "" {
+		links = append(links, linkItem{r.PackagingLabel, r.PackagingURL})
+	}
+	if r.CachyOSURL != "" {
+		links = append(links, linkItem{"CachyOS", r.CachyOSURL})
+	}
+	return links
 }
 
 // plain renders a short status message (no markdown) wrapped to the pane width.
@@ -270,25 +331,11 @@ func (m Model) referencesMarkdown(c data.PackageChange, hasClog bool) string {
 
 	if r.Release != nil {
 		fmt.Fprintf(&b, "**Upstream release: %s**\n\n", r.Release.Title)
-		if r.Release.URL != "" {
-			b.WriteString("<" + r.Release.URL + ">\n\n")
-		}
 		if r.Release.Body != "" {
 			b.WriteString(r.Release.Body + "\n\n")
 		}
 	} else if m.online && !r.IsRebuild {
 		b.WriteString("_No upstream release notes found for this version._\n\n")
-	}
-
-	b.WriteString("**Sources**\n\n")
-	if r.UpstreamURL != "" {
-		fmt.Fprintf(&b, "- **Upstream:** <%s>\n", r.UpstreamURL)
-	}
-	if r.PackagingURL != "" {
-		fmt.Fprintf(&b, "- **%s:** <%s>\n", r.PackagingLabel, r.PackagingURL)
-	}
-	if r.CachyOSURL != "" {
-		fmt.Fprintf(&b, "- **CachyOS:** <%s>\n", r.CachyOSURL)
 	}
 
 	if len(r.PackagingCommits) > 0 {
@@ -308,9 +355,6 @@ func newsMarkdown(n data.NewsItem) string {
 		fmt.Fprintf(&b, " · %s", n.Date.Format("2006-01-02"))
 	}
 	b.WriteString("\n\n")
-	if n.Link != "" {
-		b.WriteString("<" + n.Link + ">\n\n")
-	}
 	b.WriteString(n.Summary + "\n")
 	return b.String()
 }

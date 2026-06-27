@@ -2,10 +2,23 @@ package tui
 
 import (
 	"fmt"
+	"os/exec"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 )
+
+// openURL opens a http(s) URL in the user's default browser via xdg-open.
+func openURL(url string) tea.Cmd {
+	return func() tea.Msg {
+		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+			return nil
+		}
+		_ = exec.Command("xdg-open", url).Start()
+		return nil
+	}
+}
 
 // handleMouse routes mouse events to tabs, list rows, session controls, and
 // pane scrolling via bubblezone hit-testing.
@@ -43,6 +56,13 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 				return tea.Batch(cmds...)
 			}
 			return nil
+		}
+	}
+
+	// Clickable links in the detail pane.
+	for i, url := range m.curLinks {
+		if zone.Get(fmt.Sprintf("link-%d", i)).InBounds(msg) {
+			return openURL(url)
 		}
 	}
 

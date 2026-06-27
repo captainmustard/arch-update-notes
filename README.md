@@ -32,8 +32,10 @@ spring animations from [Harmonica](https://github.com/charmbracelet/harmonica).
 
 The detail pane renders release notes and changelogs as proper Markdown.
 Everything is mouse-aware — click the section tabs, click a row to select it,
-click `‹prev`/`next›` to move between updates, and scroll either pane with the
-wheel. Detail scrolling and the "fetching" indicator are spring-animated.
+click `‹prev`/`next›` to move between updates, click any URL in a detail's
+**Links** section to open it in your browser (`xdg-open`), and scroll either
+pane with the wheel. Detail scrolling and the "fetching" indicator are
+spring-animated.
 
 ## Install / build
 
@@ -74,7 +76,7 @@ recent session; use `[` / `]` to browse earlier ones.
 | `[` / `]`, `p` / `n` | Previous / next update session |
 | `/` | Filter the current list |
 | `PgUp` / `PgDn`, `u` / `d`, `g` / `G` | Scroll the detail pane (page / half-page / top / bottom) |
-| mouse | Click tabs, rows, and `‹prev`/`next›`; wheel scrolls the hovered pane |
+| mouse | Click tabs, rows, `‹prev`/`next›`, and URLs (opens browser); wheel scrolls the hovered pane |
 | `q`, `ctrl+c` | Quit |
 
 ## Notes
