@@ -53,7 +53,13 @@ go install github.com/captainmustard/arch-update-notes@latest
 ```
 
 Or grab a prebuilt binary for Linux (amd64 / arm64) from the
-[Releases](https://github.com/captainmustard/arch-update-notes/releases) page.
+[Releases](https://github.com/captainmustard/arch-update-notes/releases) page:
+
+```sh
+curl -LO https://github.com/captainmustard/arch-update-notes/releases/latest/download/arch-update-notes-v0.1.0-linux-amd64
+chmod +x arch-update-notes-v0.1.0-linux-amd64
+sudo install arch-update-notes-v0.1.0-linux-amd64 /usr/local/bin/arch-update-notes
+```
 
 ## Usage
 
