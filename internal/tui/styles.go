@@ -42,6 +42,24 @@ var (
 	footerStyle      = lipgloss.NewStyle().Foreground(colMuted)
 	indicatorStyle   = lipgloss.NewStyle().Foreground(colAccent)
 	linkStyle        = lipgloss.NewStyle().Foreground(colAccent).Underline(true)
+
+	// selected list row: full-width accent bar
+	selStyle = lipgloss.NewStyle().
+			Background(colAccent).
+			Foreground(lipgloss.Color("231")).
+			Bold(true).
+			PaddingLeft(2)
+
+	// pane title bars
+	paneTitleFocus = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("231")).
+			Background(colAccent).
+			PaddingLeft(1)
+
+	paneTitleBlur = lipgloss.NewStyle().
+			Foreground(colMuted).
+			PaddingLeft(1)
 )
 
 // actionColor maps a pacman action to a display colour.

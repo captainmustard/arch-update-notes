@@ -43,9 +43,9 @@ Prebuilt Linux binaries (amd64 / arm64) are on the
 [Releases](https://github.com/captainmustard/arch-update-notes/releases) page:
 
 ```sh
-curl -LO https://github.com/captainmustard/arch-update-notes/releases/latest/download/arch-update-notes-v0.2.1-linux-amd64
-chmod +x arch-update-notes-v0.2.1-linux-amd64
-sudo install arch-update-notes-v0.2.1-linux-amd64 /usr/local/bin/arch-update-notes
+curl -LO https://github.com/captainmustard/arch-update-notes/releases/latest/download/arch-update-notes-v0.2.2-linux-amd64
+chmod +x arch-update-notes-v0.2.2-linux-amd64
+sudo install arch-update-notes-v0.2.2-linux-amd64 /usr/local/bin/arch-update-notes
 ```
 
 Or build from source (Go 1.24+; `pacman-contrib` enables `.pacnew` detection):

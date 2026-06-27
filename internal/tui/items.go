@@ -50,46 +50,56 @@ func (d compactDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd  { return nil 
 func (d compactDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	selected := index == m.Index()
 	width := m.Width()
-	cursor := "  "
-	if selected {
-		cursor = lipgloss.NewStyle().Foreground(colAccent).Render("▌ ")
+	if width < 1 {
+		width = 1
 	}
 
-	var line, prefix string
+	// Each item produces a plain-text form (for the selected highlight bar) and
+	// a colored form (for normal rows).
+	var plain, colored, prefix string
+	muted := lipgloss.NewStyle().Foreground(colMuted)
 	switch it := item.(type) {
 	case pkgItem:
-		glyph := lipgloss.NewStyle().Foreground(actionColor(string(it.c.Action))).Render(actionGlyph(string(it.c.Action)))
-		name := it.c.Name
-		ver := lipgloss.NewStyle().Foreground(colMuted).Render(it.c.Version())
-		line = fmt.Sprintf("%s %s  %s", glyph, name, ver)
+		a := string(it.c.Action)
+		plain = fmt.Sprintf("%s %s  %s", actionGlyph(a), it.c.Name, it.c.Version())
+		colored = fmt.Sprintf("%s %s  %s",
+			lipgloss.NewStyle().Foreground(actionColor(a)).Render(actionGlyph(a)),
+			it.c.Name, muted.Render(it.c.Version()))
 		prefix = rowPkg
 	case newsItem:
 		tag := ""
 		if it.isNew {
-			tag = newTagStyle.Render(" [NEW]")
+			tag = " [NEW]"
 		}
-		src := lipgloss.NewStyle().Foreground(colMuted).Render("(" + it.n.Source + ")")
-		line = fmt.Sprintf("%s %s%s", src, it.n.Title, tag)
+		plain = fmt.Sprintf("(%s) %s%s", it.n.Source, it.n.Title, tag)
+		colTag := ""
+		if it.isNew {
+			colTag = newTagStyle.Render(" [NEW]")
+		}
+		colored = fmt.Sprintf("%s %s%s", muted.Render("("+it.n.Source+")"), it.n.Title, colTag)
 		prefix = rowNews
 	case pacnewItem:
-		line = lipgloss.NewStyle().Foreground(colWarn).Render("⚠ ") + it.path
+		plain = "⚠ " + it.path
+		colored = lipgloss.NewStyle().Foreground(colWarn).Render("⚠ ") + it.path
 		prefix = rowPacnew
 	case snapItem:
-		flake := lipgloss.NewStyle().Foreground(colAccent).Render("❄")
-		when := lipgloss.NewStyle().Foreground(colMuted).Render(it.p.When().Format("01-02 15:04"))
-		line = fmt.Sprintf("%s %s  %s", flake, when, it.p.Summary())
+		when := it.p.When().Format("01-02 15:04")
+		plain = fmt.Sprintf("❄ %s  %s", when, it.p.Summary())
+		colored = fmt.Sprintf("%s %s  %s",
+			lipgloss.NewStyle().Foreground(colAccent).Render("❄"),
+			muted.Render(when), it.p.Summary())
 		prefix = rowSnap
 	}
 
-	full := cursor + line
+	var line string
 	if selected {
-		full = lipgloss.NewStyle().Bold(true).Render(full)
+		// Full-width accent bar (PaddingLeft 2 → text starts at column 2).
+		txt := truncate.StringWithTail(plain, uint(width-2), "…")
+		line = selStyle.Width(width).Render(txt)
+	} else {
+		line = truncate.StringWithTail("  "+colored, uint(width), "…")
 	}
-	// Truncate to width (rune- and ANSI-aware) to keep each item on one line.
-	if width > 0 {
-		full = truncate.StringWithTail(full, uint(width), "…")
-	}
-	io.WriteString(w, zone.Mark(fmt.Sprintf("%s%d", prefix, index), full))
+	io.WriteString(w, zone.Mark(fmt.Sprintf("%s%d", prefix, index), line))
 }
 
 // row zone id prefixes for each list.

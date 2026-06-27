@@ -32,7 +32,8 @@ func (m *Model) layout() {
 	if innerListW < 10 {
 		innerListW = 10
 	}
-	innerH := bodyH - 2
+	// each pane = 1 title line + 2 border lines + content
+	innerH := bodyH - 3
 	if innerH < 1 {
 		innerH = 1
 	}
@@ -129,20 +130,59 @@ func (m Model) sessionLine() string {
 	return line + prev + sessionStyle.Render(" ") + next
 }
 
-func (m Model) listPane() string {
+func (m Model) listOuterWidth() int {
 	lw := listWidth
 	if lw > m.width/2 {
 		lw = m.width / 2
 	}
-	style := paneStyle
-	style = style.Width(lw - 2).Height(m.detail.Height)
-	return zone.Mark("listpane", style.Render(m.activeList().View()))
+	return lw
+}
+
+func (m Model) listPane() string {
+	lw := m.listOuterWidth()
+	title := paneTitleFocus.Width(lw).MaxWidth(lw).Render(m.listTitle())
+	box := paneActiveStyle.Width(lw - 2).Height(m.detail.Height).Render(m.activeList().View())
+	return zone.Mark("listpane", lipgloss.JoinVertical(lipgloss.Left, title, box))
 }
 
 func (m Model) detailPane() string {
-	style := paneActiveStyle
-	style = style.Width(m.detail.Width).Height(m.detail.Height)
-	return zone.Mark("detailpane", style.Render(m.detail.View()))
+	ow := m.detail.Width + 2
+	title := paneTitleBlur.Width(ow).MaxWidth(ow).Render(m.detailTitle())
+	box := paneStyle.Width(m.detail.Width).Height(m.detail.Height).Render(m.detail.View())
+	return zone.Mark("detailpane", lipgloss.JoinVertical(lipgloss.Left, title, box))
+}
+
+// listTitle is the focused pane header: section name + position.
+func (m Model) listTitle() string {
+	l := m.activeList()
+	n := len(l.Items())
+	name := m.active.String()
+	if n == 0 {
+		return name
+	}
+	return fmt.Sprintf("%s · %d/%d", name, l.Index()+1, n)
+}
+
+// detailTitle is the detail pane header, with a hint of what's selected.
+func (m Model) detailTitle() string {
+	switch m.active {
+	case tabPackages:
+		if c, ok := m.selectedPkg(); ok {
+			return "Details · " + c.Name
+		}
+	case tabPacnew:
+		if it, ok := m.pacnewList.SelectedItem().(pacnewItem); ok {
+			return "Details · " + it.path
+		}
+	case tabSnapshots:
+		if it, ok := m.snapList.SelectedItem().(snapItem); ok {
+			if it.p.HasPost() {
+				return fmt.Sprintf("Details · #%d→#%d", it.p.Pre.Number, it.p.Post.Number)
+			}
+			return fmt.Sprintf("Details · #%d", it.p.Pre.Number)
+		}
+	}
+	return "Details"
 }
 
 func (m Model) footerView() string {
