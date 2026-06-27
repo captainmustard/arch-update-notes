@@ -40,6 +40,7 @@ func (m *Model) layout() {
 	m.pkgList.SetSize(innerListW, innerH)
 	m.newsList.SetSize(innerListW, innerH)
 	m.pacnewList.SetSize(innerListW, innerH)
+	m.snapList.SetSize(innerListW, innerH)
 
 	detailW := m.width - lw - 2
 	if detailW < 10 {

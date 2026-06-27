@@ -305,6 +305,11 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.pacnewList, c = m.pacnewList.Update(message)
 		cmds = append(cmds, c)
 		m.refreshDetail()
+	case tabSnapshots:
+		var c tea.Cmd
+		m.snapList, c = m.snapList.Update(message)
+		cmds = append(cmds, c)
+		m.refreshDetail()
 	}
 
 	return m, tea.Batch(cmds...)
