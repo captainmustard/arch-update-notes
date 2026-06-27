@@ -16,10 +16,19 @@ import (
 	"github.com/captainmustard/arch-update-notes/internal/tui"
 )
 
+// version is set at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	logPath := flag.String("log", data.DefaultPacmanLog, "path to the pacman log")
 	noNews := flag.Bool("no-news", false, "skip fetching online news feeds")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("arch-update-notes %s\n", version)
+		return
+	}
 
 	sessions, err := data.ParseSessions(*logPath)
 	if err != nil {

@@ -52,6 +52,9 @@ Optionally install it onto your PATH:
 go install github.com/captainmustard/arch-update-notes@latest
 ```
 
+Or grab a prebuilt binary for Linux (amd64 / arm64) from the
+[Releases](https://github.com/captainmustard/arch-update-notes/releases) page.
+
 ## Usage
 
 ```
